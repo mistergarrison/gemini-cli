@@ -39,6 +39,50 @@ import {
 
 export const OUTPUT_UPDATE_INTERVAL_MS = 1000;
 
+/**
+ * Parses the `--allowed-tools` flag to determine which sub-commands of the
+ * ShellTool are allowed. The flag can be provided multiple times.
+ *
+ * @param allowedTools The list of allowed tools from the config.
+ * @returns A Set of allowed sub-commands, or null if all commands are allowed.
+ *  - `null`: All sub-commands are allowed (e.g., --allowed-tools="ShellTool").
+ *  - `Set<string>`: A set of specifically allowed sub-commands (e.g., --allowed-tools="ShellTool(wc)" --allowed-tools="ShellTool(ls)").
+ *  - `Set<>` (empty): No sub-commands are allowed (e.g., --allowed-tools="ShellTool()").
+ */
+function parseAllowedSubcommands(
+  allowedTools: readonly string[],
+): Set<string> | null {
+  const shellToolEntries = allowedTools.filter((tool) =>
+    tool.startsWith(ShellTool.Name),
+  );
+
+  if (shellToolEntries.length === 0) {
+    return new Set(); // ShellTool not mentioned, so no subcommands are allowed.
+  }
+
+  // If any entry is just "run_shell_command", all subcommands are allowed.
+  if (shellToolEntries.some((entry) => entry === ShellTool.Name)) {
+    return null;
+  }
+
+  const allSubcommands = new Set<string>();
+
+  for (const entry of shellToolEntries) {
+    const match = entry.match(/^run_shell_command\((.*)\)$/);
+    if (match) {
+      const subcommands = match[1];
+      if (subcommands) {
+        subcommands
+          .split(',')
+          .map((s) => s.trim())
+          .forEach((s) => allSubcommands.add(s));
+      }
+    }
+  }
+
+  return allSubcommands;
+}
+
 export interface ShellToolParams {
   command: string;
   description?: string;
@@ -76,6 +120,27 @@ export class ShellToolInvocation extends BaseToolInvocation<
   ): Promise<ToolCallConfirmationDetails | false> {
     const command = stripShellWrapper(this.params.command);
     const rootCommands = [...new Set(getCommandRoots(command))];
+
+    // In non-interactive mode, we need to prevent the tool from hanging while
+    // waiting for user input. If a tool is not fully allowed (e.g. via
+    // --allowed-tools="ShellTool(wc)"), we should throw an error instead of
+    // prompting for confirmation.
+    if (!this.config.isInteractive()) {
+      const allowed = this.config.getAllowedTools() || [];
+      const allowedSubcommands = parseAllowedSubcommands(allowed);
+      if (allowedSubcommands !== null) {
+        // Not all commands are allowed, so we need to check.
+        const allCommandsAllowed = rootCommands.every((cmd) =>
+          allowedSubcommands.has(cmd),
+        );
+        if (!allCommandsAllowed) {
+          throw new Error(
+            `Command "${command}" is not in the list of allowed tools for non-interactive mode.`,
+          );
+        }
+      }
+    }
+
     const commandsToConfirm = rootCommands.filter(
       (command) => !this.allowlist.has(command),
     );
