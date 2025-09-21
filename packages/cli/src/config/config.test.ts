@@ -1934,6 +1934,29 @@ describe('loadCliConfig tool exclusions', () => {
     expect(config.getExcludeTools()).not.toContain('replace');
     expect(config.getExcludeTools()).not.toContain('write_file');
   });
+
+  it('should not exclude ShellTool in non-interactive mode when allowed with a sub-command', async () => {
+    process.stdin.isTTY = false;
+    const argv: CliArgs = {
+      prompt: 'test',
+      allowedTools: ['ShellTool(wc)'],
+      // other properties can be undefined or have default values
+    } as CliArgs;
+    const config = await loadCliConfig({}, [], 'test-session', argv);
+    expect(config.getExcludeTools()).not.toContain('run_shell_command');
+    expect(config.getExcludeTools()).toContain('replace');
+    expect(config.getExcludeTools()).toContain('write_file');
+  });
+
+  it('should still exclude EditTool in non-interactive mode when allowed with a sub-command', async () => {
+    process.stdin.isTTY = false;
+    const argv: CliArgs = {
+      prompt: 'test',
+      allowedTools: ['EditTool(some-arg)'],
+    } as CliArgs;
+    const config = await loadCliConfig({}, [], 'test-session', argv);
+    expect(config.getExcludeTools()).toContain('replace'); // EditTool.Name is 'replace'
+  });
 });
 
 describe('loadCliConfig interactive', () => {
