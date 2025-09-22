@@ -32,6 +32,7 @@ import {
   ShellTool,
   EditTool,
   WriteFileTool,
+  SHELL_TOOL_NAMES,
 } from '@google/gemini-cli-core';
 import type { Settings } from './settings.js';
 
@@ -524,7 +525,9 @@ export async function loadCliConfig(
             if (t === ShellTool.Name) {
               // If any of the allowed tools is ShellTool (even with subcommands), don't exclude it.
               return !allowedTools.some((allowed) =>
-                allowed.startsWith(ShellTool.Name),
+                SHELL_TOOL_NAMES.some((shellName) =>
+                  allowed.startsWith(shellName),
+                ),
               );
             }
             return !allowedToolsSet.has(t);
@@ -538,7 +541,9 @@ export async function loadCliConfig(
             if (t === ShellTool.Name) {
               // If any of the allowed tools is ShellTool (even with subcommands), don't exclude it.
               return !allowedTools.some((allowed) =>
-                allowed.startsWith(ShellTool.Name),
+                SHELL_TOOL_NAMES.some((shellName) =>
+                  allowed.startsWith(shellName),
+                ),
               );
             }
             return !allowedToolsSet.has(t);
