@@ -520,13 +520,29 @@ export async function loadCliConfig(
       case ApprovalMode.DEFAULT:
         // In default non-interactive mode, all tools that require approval are excluded.
         extraExcludes.push(
-          ...defaultExcludes.filter((t) => !allowedToolsSet.has(t)),
+          ...defaultExcludes.filter((t) => {
+            if (t === ShellTool.Name) {
+              // If any of the allowed tools is ShellTool (even with subcommands), don't exclude it.
+              return !allowedTools.some((allowed) =>
+                allowed.startsWith(ShellTool.Name),
+              );
+            }
+            return !allowedToolsSet.has(t);
+          }),
         );
         break;
       case ApprovalMode.AUTO_EDIT:
         // In auto-edit non-interactive mode, only tools that still require a prompt are excluded.
         extraExcludes.push(
-          ...autoEditExcludes.filter((t) => !allowedToolsSet.has(t)),
+          ...autoEditExcludes.filter((t) => {
+            if (t === ShellTool.Name) {
+              // If any of the allowed tools is ShellTool (even with subcommands), don't exclude it.
+              return !allowedTools.some((allowed) =>
+                allowed.startsWith(ShellTool.Name),
+              );
+            }
+            return !allowedToolsSet.has(t);
+          }),
         );
         break;
       case ApprovalMode.YOLO:
