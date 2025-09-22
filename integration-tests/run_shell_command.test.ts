@@ -125,10 +125,12 @@ describe('run_shell_command', () => {
 
     const prompt = `use wc to tell me how many lines there are in /proc/meminfo`;
 
-    const result = await rig.run({
-      stdin: prompt,
-      args: ['--yolo'],
-    });
+    const result = await rig.run(
+      {
+        prompt: prompt,
+      },
+      '--yolo',
+    );
 
     const foundToolCall = await rig.waitForToolCall('run_shell_command', 15000);
 
@@ -142,6 +144,7 @@ describe('run_shell_command', () => {
       foundToolCall,
       'Expected to find a run_shell_command tool call',
     ).toBeTruthy();
+    expect(result).toContain('lines in /proc/meminfo');
   });
 
   it('should work with ShellTool alias', async () => {
