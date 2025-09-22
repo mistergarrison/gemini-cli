@@ -61,7 +61,7 @@ export function doesToolInvocationMatch(
 
     if (
       'command' in invocation.params &&
-      toolNames.includes('run_shell_command')
+      toolNames.some((name) => SHELL_TOOL_NAMES.includes(name))
     ) {
       const argValue = String(
         (invocation.params as { command: string }).command,
