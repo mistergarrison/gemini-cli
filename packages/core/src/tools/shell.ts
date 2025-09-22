@@ -22,6 +22,7 @@ import {
   ToolConfirmationOutcome,
   Kind,
 } from './tools.js';
+import { ApprovalMode } from '../config/config.js';
 import { getErrorMessage } from '../utils/errors.js';
 import { summarizeToolOutput } from '../utils/summarizer.js';
 import type {
@@ -34,6 +35,7 @@ import type { AnsiOutput } from '../utils/terminalSerializer.js';
 import {
   getCommandRoots,
   isCommandAllowed,
+  SHELL_TOOL_NAMES,
   stripShellWrapper,
 } from '../utils/shell-utils.js';
 
@@ -53,24 +55,26 @@ function parseAllowedSubcommands(
   allowedTools: readonly string[],
 ): Set<string> | null {
   const shellToolEntries = allowedTools.filter((tool) =>
-    tool.startsWith(ShellTool.Name),
+    SHELL_TOOL_NAMES.some((name) => tool.startsWith(name)),
   );
 
   if (shellToolEntries.length === 0) {
     return new Set(); // ShellTool not mentioned, so no subcommands are allowed.
   }
 
-  // If any entry is just "run_shell_command", all subcommands are allowed.
-  if (shellToolEntries.some((entry) => entry === ShellTool.Name)) {
+  // If any entry is just "run_shell_command" or "ShellTool", all subcommands are allowed.
+  if (shellToolEntries.some((entry) => SHELL_TOOL_NAMES.includes(entry))) {
     return null;
   }
 
   const allSubcommands = new Set<string>();
+  const toolNamePattern = SHELL_TOOL_NAMES.join('|');
+  const regex = new RegExp(`^(${toolNamePattern})\\((.*)\\)$`);
 
   for (const entry of shellToolEntries) {
-    const match = entry.match(/^run_shell_command\((.*)\)$/);
+    const match = entry.match(regex);
     if (match) {
-      const subcommands = match[1];
+      const subcommands = match[2];
       if (subcommands) {
         subcommands
           .split(',')
@@ -124,8 +128,11 @@ export class ShellToolInvocation extends BaseToolInvocation<
     // In non-interactive mode, we need to prevent the tool from hanging while
     // waiting for user input. If a tool is not fully allowed (e.g. via
     // --allowed-tools="ShellTool(wc)"), we should throw an error instead of
-    // prompting for confirmation.
-    if (!this.config.isInteractive()) {
+    // prompting for confirmation. This check is skipped in YOLO mode.
+    if (
+      !this.config.isInteractive() &&
+      this.config.getApprovalMode() !== ApprovalMode.YOLO
+    ) {
       const allowed = this.config.getAllowedTools() || [];
       const allowedSubcommands = parseAllowedSubcommands(allowed);
       if (allowedSubcommands !== null) {
