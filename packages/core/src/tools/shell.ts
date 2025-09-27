@@ -136,11 +136,13 @@ export class ShellToolInvocation extends BaseToolInvocation<
       const allowed = this.config.getAllowedTools() || [];
       const allowedSubcommands = parseAllowedSubcommands(allowed);
       if (allowedSubcommands !== null) {
-        // Not all commands are allowed, so we need to check.
-        const allCommandsAllowed = rootCommands.every((cmd) =>
-          allowedSubcommands.has(cmd),
+        // Not all commands are allowed, so we need to check if the current
+        // command is prefixed by any of the allowed subcommands.
+        const isAllowed = [...allowedSubcommands].some((prefix) =>
+          command.startsWith(prefix),
         );
-        if (!allCommandsAllowed) {
+
+        if (!isAllowed) {
           throw new Error(
             `Command "${command}" is not in the list of allowed tools for non-interactive mode.`,
           );

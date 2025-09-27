@@ -47,6 +47,180 @@ vi.mock('@google/gemini-cli-core', async (importOriginal) => {
       getMetrics: vi.fn(),
     },
   };
+  describe('--allowed-tools ShellTool prefix tests', () => {
+    let originalExecuteToolCall: typeof executeToolCall;
+    let ShellTool: typeof import('@google/gemini-cli-core').ShellTool;
+    let ToolRegistry: typeof import('@google/gemini-cli-core').ToolRegistry;
+    let ShellExecutionService: typeof import('@google/gemini-cli-core').ShellExecutionService;
+    let ApprovalMode: typeof import('@google/gemini-cli-core').ApprovalMode;
+
+    beforeAll(async () => {
+      const core = await vi.importActual<
+        typeof import('@google/gemini-cli-core')
+      >('@google/gemini-cli-core');
+      originalExecuteToolCall = core.executeToolCall;
+      ShellTool = core.ShellTool;
+      ToolRegistry = core.ToolRegistry;
+      ShellExecutionService = core.ShellExecutionService;
+      ApprovalMode = core.ApprovalMode;
+    });
+
+    beforeEach(() => {
+      // Use the real `executeToolCall` implementation for this test suite
+      // so that we can test the logic within the ShellTool.
+      vi.mocked(executeToolCall).mockImplementation(originalExecuteToolCall);
+
+      // Mock the config for non-interactive mode
+      vi.spyOn(mockConfig, 'isInteractive').mockReturnValue(false);
+      vi.spyOn(mockConfig, 'getApprovalMode').mockReturnValue(
+        ApprovalMode.Auto,
+      );
+
+      // Mock the ToolRegistry to provide a real ShellTool instance
+      const shellTool = new ShellTool(mockConfig);
+      const toolRegistry = new ToolRegistry(mockConfig);
+      toolRegistry.registerTool(shellTool);
+      vi.mocked(mockConfig.getToolRegistry).mockReturnValue(toolRegistry);
+
+      // Mock the underlying shell execution to avoid running real commands
+      vi.spyOn(ShellExecutionService, 'execute').mockResolvedValue({
+        result: Promise.resolve({
+          output: 'tool output',
+          exitCode: 0,
+          pid: 123,
+          aborted: false,
+          signal: null,
+          error: null,
+        }),
+        pid: 123,
+      });
+    });
+
+    it('should succeed when allowed tool is a simple prefix', async () => {
+      vi.spyOn(mockConfig, 'getAllowedTools').mockReturnValue([
+        'ShellTool(wc)',
+      ]);
+      const firstCallEvents: ServerGeminiStreamEvent[] = [
+        {
+          type: GeminiEventType.ToolCallRequest,
+          value: {
+            callId: 'tool-shell-prefix',
+            name: 'run_shell_command',
+            args: { command: 'wc -l /etc/hosts' },
+            isClientInitiated: false,
+            prompt_id: 'prompt-id-prefix',
+          },
+        },
+      ];
+      const secondCallEvents: ServerGeminiStreamEvent[] = [
+        { type: GeminiEventType.Content, value: 'ok' },
+        {
+          type: GeminiEventType.Finished,
+          value: { reason: undefined, usageMetadata: { totalTokenCount: 1 } },
+        },
+      ];
+      mockGeminiClient.sendMessageStream
+        .mockClear()
+        .mockReturnValueOnce(createStreamFromEvents(firstCallEvents))
+        .mockReturnValueOnce(createStreamFromEvents(secondCallEvents));
+
+      await runNonInteractive(
+        mockConfig,
+        mockSettings,
+        'run wc -l /etc/hosts',
+        'prompt-id-prefix',
+      );
+
+      // If the command doesn't throw and the second stream is processed,
+      // it means the tool call was allowed and successful.
+      expect(processStdoutSpy).toHaveBeenCalledWith('ok');
+    });
+
+    it('should succeed when allowed tool with space is a prefix', async () => {
+      vi.spyOn(mockConfig, 'getAllowedTools').mockReturnValue([
+        'ShellTool(wc -l)',
+      ]);
+      const firstCallEvents: ServerGeminiStreamEvent[] = [
+        {
+          type: GeminiEventType.ToolCallRequest,
+          value: {
+            callId: 'tool-shell-prefix',
+            name: 'run_shell_command',
+            args: { command: 'wc -l /etc/hosts' },
+            isClientInitiated: false,
+            prompt_id: 'prompt-id-prefix',
+          },
+        },
+      ];
+      const secondCallEvents: ServerGeminiStreamEvent[] = [
+        { type: GeminiEventType.Content, value: 'ok' },
+        {
+          type: GeminiEventType.Finished,
+          value: { reason: undefined, usageMetadata: { totalTokenCount: 1 } },
+        },
+      ];
+      mockGeminiClient.sendMessageStream
+        .mockClear()
+        .mockReturnValueOnce(createStreamFromEvents(firstCallEvents))
+        .mockReturnValueOnce(createStreamFromEvents(secondCallEvents));
+
+      await runNonInteractive(
+        mockConfig,
+        mockSettings,
+        'run wc -l /etc/hosts',
+        'prompt-id-prefix',
+      );
+
+      expect(processStdoutSpy).toHaveBeenCalledWith('ok');
+    });
+
+    it('should fail when allowed tool with space is not a prefix', async () => {
+      vi.spyOn(mockConfig, 'getAllowedTools').mockReturnValue([
+        'ShellTool(wc -l)',
+      ]);
+
+      // The tool call will request `wc /etc/hosts`, which is not prefixed by `wc -l`
+      const firstCallEvents: ServerGeminiStreamEvent[] = [
+        {
+          type: GeminiEventType.ToolCallRequest,
+          value: {
+            callId: 'tool-shell-prefix-fail',
+            name: 'run_shell_command',
+            args: { command: 'wc /etc/hosts' },
+            isClientInitiated: false,
+            prompt_id: 'prompt-id-prefix-fail',
+          },
+        },
+      ];
+      // The second call is the model responding to the tool error.
+      const secondCallEvents: ServerGeminiStreamEvent[] = [
+        { type: GeminiEventType.Content, value: 'I cannot do that.' },
+        {
+          type: GeminiEventType.Finished,
+          value: { reason: undefined, usageMetadata: { totalTokenCount: 1 } },
+        },
+      ];
+      mockGeminiClient.sendMessageStream
+        .mockClear()
+        .mockReturnValueOnce(createStreamFromEvents(firstCallEvents))
+        .mockReturnValueOnce(createStreamFromEvents(secondCallEvents));
+
+      await runNonInteractive(
+        mockConfig,
+        mockSettings,
+        'run wc /etc/hosts',
+        'prompt-id-prefix-fail',
+      );
+
+      // The error from `shouldConfirmExecute` should be caught and logged.
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        'Error executing tool run_shell_command: Command "wc /etc/hosts" is not in the list of allowed tools for non-interactive mode.',
+      );
+
+      // The final response from the model should be printed.
+      expect(processStdoutSpy).toHaveBeenCalledWith('I cannot do that.');
+    });
+  });
 });
 
 const mockGetCommands = vi.hoisted(() => vi.fn());
@@ -118,6 +292,22 @@ describe('runNonInteractive', () => {
       getOutputFormat: vi.fn().mockReturnValue('text'),
       getFolderTrustFeature: vi.fn().mockReturnValue(false),
       getFolderTrust: vi.fn().mockReturnValue(false),
+      getAllowedTools: vi.fn().mockReturnValue(undefined),
+      isInteractive: vi.fn().mockReturnValue(true),
+      getApprovalMode: vi.fn().mockReturnValue('auto'),
+      getMcpServers: vi.fn().mockReturnValue([]),
+      getMcpServerCommand: vi.fn().mockReturnValue(undefined),
+      getPromptRegistry: vi.fn().mockReturnValue({
+        clear: vi.fn(),
+        removePromptsByServer: vi.fn(),
+      }),
+      getWorkspaceContext: vi.fn().mockReturnValue({
+        getDirectories: vi.fn().mockReturnValue([]),
+      }),
+      getUsageStatisticsEnabled: vi.fn().mockReturnValue(false),
+      getExcludeTools: vi.fn().mockReturnValue([]),
+      getCoreTools: vi.fn().mockReturnValue([]),
+      getShellExecutionConfig: vi.fn().mockReturnValue({}),
     } as unknown as Config;
 
     mockSettings = {
