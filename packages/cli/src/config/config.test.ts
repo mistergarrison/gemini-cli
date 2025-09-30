@@ -2602,7 +2602,16 @@ describe('loadCliConfig tool exclusions', () => {
       'ShellTool',
     ];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig({}, [], 'test-session', argv);
+    const config = await loadCliConfig(
+      {},
+      [],
+      new ExtensionEnablementManager(
+        ExtensionStorage.getUserExtensionsDir(),
+        argv.extensions,
+      ),
+      'test-session',
+      argv,
+    );
     expect(config.getExcludeTools()).not.toContain(ShellTool.Name);
   });
 
@@ -2617,7 +2626,16 @@ describe('loadCliConfig tool exclusions', () => {
       'run_shell_command',
     ];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig({}, [], 'test-session', argv);
+    const config = await loadCliConfig(
+      {},
+      [],
+      new ExtensionEnablementManager(
+        ExtensionStorage.getUserExtensionsDir(),
+        argv.extensions,
+      ),
+      'test-session',
+      argv,
+    );
     expect(config.getExcludeTools()).not.toContain(ShellTool.Name);
   });
 
@@ -2632,7 +2650,16 @@ describe('loadCliConfig tool exclusions', () => {
       'ShellTool(wc)',
     ];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig({}, [], 'test-session', argv);
+    const config = await loadCliConfig(
+      {},
+      [],
+      new ExtensionEnablementManager(
+        ExtensionStorage.getUserExtensionsDir(),
+        argv.extensions,
+      ),
+      'test-session',
+      argv,
+    );
     expect(config.getExcludeTools()).not.toContain(ShellTool.Name);
   });
 });

@@ -72,7 +72,8 @@ describe('run_shell_command', () => {
     const rig = new TestRig();
     await rig.setup('should run allowed sub-command in non-interactive mode');
 
-    const prompt = `use wc to tell me how many lines there are in /proc/meminfo`;
+    const testFile = rig.createFile('test.txt', 'Lorem\nIpsum\nDolor\n');
+    const prompt = `use wc to tell me how many lines there are in ${testFile}`;
 
     // Provide the prompt via stdin to simulate non-interactive mode
     const result = await rig.run({
@@ -98,7 +99,8 @@ describe('run_shell_command', () => {
     const rig = new TestRig();
     await rig.setup('should succeed with no parens in non-interactive mode');
 
-    const prompt = `use wc to tell me how many lines there are in /proc/meminfo`;
+    const testFile = rig.createFile('test.txt', 'Lorem\nIpsum\nDolor\n');
+    const prompt = `use wc to tell me how many lines there are in ${testFile}`;
 
     const result = await rig.run({
       stdin: prompt,
@@ -123,7 +125,8 @@ describe('run_shell_command', () => {
     const rig = new TestRig();
     await rig.setup('should succeed with --yolo mode');
 
-    const prompt = `use wc to tell me how many lines there are in /proc/meminfo`;
+    const testFile = rig.createFile('test.txt', 'Lorem\nIpsum\nDolor\n');
+    const prompt = `use wc to tell me how many lines there are in ${testFile}`;
 
     const result = await rig.run(
       {
@@ -144,14 +147,15 @@ describe('run_shell_command', () => {
       foundToolCall,
       'Expected to find a run_shell_command tool call',
     ).toBeTruthy();
-    expect(result).toContain('lines in /proc/meminfo');
+    expect(result).toContain(`lines in ${testFile}`);
   });
 
   it('should work with ShellTool alias', async () => {
     const rig = new TestRig();
     await rig.setup('should work with ShellTool alias');
 
-    const prompt = `use wc to tell me how many lines there are in /proc/meminfo`;
+    const testFile = rig.createFile('test.txt', 'Lorem\nIpsum\nDolor\n');
+    const prompt = `use wc to tell me how many lines there are in ${testFile}`;
 
     const result = await rig.run({
       stdin: prompt,
