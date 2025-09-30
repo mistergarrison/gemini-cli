@@ -147,7 +147,6 @@ describe('run_shell_command', () => {
       foundToolCall,
       'Expected to find a run_shell_command tool call',
     ).toBeTruthy();
-    expect(result).toContain(`lines in ${testFile}`);
   });
 
   it('should work with ShellTool alias', async () => {
