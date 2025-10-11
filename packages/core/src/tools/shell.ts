@@ -149,12 +149,14 @@ export class ShellToolInvocation extends BaseToolInvocation<
       // of the allowedShellCommand prefixes. We have to add ' ' before checking
       // for prefixes, because otherwise we would match against completely
       // different commands. We don't want "ShellTool(ls)" to allow lsmod.
-      const allCommandsAllowed = commands.every((cmd) =>
-        [...allowedShellCommands].some(
-          (allowedShellCmd) =>
-            allowedShellCmd === cmd || cmd.startsWith(allowedShellCmd + ' '),
-        ),
-      );
+      const allCommandsAllowed = commands.every((cmd) => {
+        for (const allowed of allowedShellCommands) {
+          if (cmd === allowed || cmd.startsWith(allowed + ' ')) {
+            return true;
+          }
+        }
+        return false;
+      });
 
       if (allCommandsAllowed) {
         // All parts of the command are allowed, so confirmation is not needed.
