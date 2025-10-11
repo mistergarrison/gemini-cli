@@ -62,6 +62,7 @@ describe('ShellTool', () => {
       getGeminiClient: vi.fn(),
       getEnableInteractiveShell: vi.fn().mockReturnValue(false),
       isInteractive: vi.fn().mockReturnValue(true),
+      getApprovalMode: vi.fn().mockReturnValue('strict'),
     } as unknown as Config;
 
     shellTool = new ShellTool(mockConfig);
@@ -409,6 +410,35 @@ describe('ShellTool', () => {
 
     it('should throw an error if validation fails', () => {
       expect(() => shellTool.build({ command: '' })).toThrow();
+    });
+
+    describe('in non-interactive mode', () => {
+      beforeEach(() => {
+        (mockConfig.isInteractive as Mock).mockReturnValue(false);
+      });
+
+      it('should not throw an error for an allowed command with arguments', async () => {
+        (mockConfig.getCoreTools as Mock).mockReturnValue(['ShellTool(wc -l)']);
+        const invocation = shellTool.build({ command: 'wc -l foo.txt' });
+        const confirmation = await invocation.shouldConfirmExecute(
+          new AbortController().signal,
+        );
+        expect(confirmation).not.toBe(false);
+      });
+
+      it('should throw an error for a disallowed command', () => {
+        (mockConfig.getCoreTools as Mock).mockReturnValue(['ShellTool(wc -l)']);
+        expect(() => shellTool.build({ command: 'ls -l' })).toThrow(
+          'Command(s) not in the allowed commands list. Disallowed commands: "ls -l"',
+        );
+      });
+
+      it('should throw an error for a command that is a prefix of an allowed command', () => {
+        (mockConfig.getCoreTools as Mock).mockReturnValue(['ShellTool(wc -l)']);
+        expect(() => shellTool.build({ command: 'wc' })).toThrow(
+          'Command(s) not in the allowed commands list. Disallowed commands: "wc"',
+        );
+      });
     });
   });
 
