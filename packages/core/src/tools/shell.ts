@@ -142,9 +142,13 @@ export class ShellToolInvocation extends BaseToolInvocation<
         return false;
       }
 
+      // Break the string into a list of individual commands it will execute,
+      // to make sure that chaining doesn't hide non-permitted commands.
       const commands = splitCommands(command);
-      // we have to add ' ' before checking for prefixes, because otherwise
-      // we would match against different commands.
+      // All commands are allowed if for each command, it matches at least one
+      // of the allowedShellCommand prefixes. We have to add ' ' before checking
+      // for prefixes, because otherwise we would match against completely
+      // different commands. We don't want "ShellTool(ls)" to allow lsmod.
       const allCommandsAllowed = commands.every((cmd) =>
         [...allowedShellCommands].some(
           (allowedShellCmd) =>
