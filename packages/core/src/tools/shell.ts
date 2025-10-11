@@ -36,57 +36,11 @@ import {
   getCommandRoots,
   isCommandAllowed,
   SHELL_TOOL_NAMES,
-  splitCommands,
   stripShellWrapper,
 } from '../utils/shell-utils.js';
+import { doesToolInvocationMatch } from '../utils/tool-utils.js';
 
 export const OUTPUT_UPDATE_INTERVAL_MS = 1000;
-
-/**
- * Parses the `--allowed-tools` flag to determine which shell commands the
- * ShellTool allows. The flag can be provided multiple times.
- *
- * @param allowedTools The list of allowed tools from the config.
- * @returns A Set of allowed shell commands, or null if all commands are allowed.
- *  - `null`: All shell commands are allowed (e.g., --allowed-tools="ShellTool").
- *  - `Set<string>`: A set of specifically allowed shell commands (e.g., --allowed-tools="ShellTool(wc)" --allowed-tools="ShellTool(ls)").
- *  - `Set<>` (empty): No shell commands are allowed (e.g., --allowed-tools="ShellTool()").
- */
-function parseAllowedShellCommands(
-  allowedTools: readonly string[],
-): Set<string> | null {
-  const shellToolEntries = allowedTools.filter((tool) =>
-    SHELL_TOOL_NAMES.some((name) => tool.startsWith(name)),
-  );
-
-  if (shellToolEntries.length === 0) {
-    return new Set(); // ShellTool not mentioned, so no subcommands are allowed.
-  }
-
-  // If any entry is just "run_shell_command" or "ShellTool", all subcommands are allowed.
-  if (shellToolEntries.some((entry) => SHELL_TOOL_NAMES.includes(entry))) {
-    return null;
-  }
-
-  const allSubcommands = new Set<string>();
-  const toolNamePattern = SHELL_TOOL_NAMES.join('|');
-  const regex = new RegExp(`^(${toolNamePattern})\\((.*)\\)$`);
-
-  for (const entry of shellToolEntries) {
-    const match = entry.match(regex);
-    if (match) {
-      const subcommands = match[2];
-      if (subcommands) {
-        subcommands
-          .split(',')
-          .map((s) => s.trim())
-          .forEach((s) => s && allSubcommands.add(s));
-      }
-    }
-  }
-
-  return allSubcommands;
-}
 
 export interface ShellToolParams {
   command: string;
@@ -134,32 +88,10 @@ export class ShellToolInvocation extends BaseToolInvocation<
       !this.config.isInteractive() &&
       this.config.getApprovalMode() !== ApprovalMode.YOLO
     ) {
-      const allowed = this.config.getAllowedTools() || [];
-      const allowedShellCommands = parseAllowedShellCommands(allowed);
-
-      if (allowedShellCommands == null) {
-        // all commands are permitted, so confirmation is not needed.
-        return false;
-      }
-
-      // Break the string into a list of individual commands it will execute,
-      // to make sure that chaining doesn't hide non-permitted commands.
-      const commands = splitCommands(command);
-      // All commands are allowed if for each command, it matches at least one
-      // of the allowedShellCommand prefixes. We have to add ' ' before checking
-      // for prefixes, because otherwise we would match against completely
-      // different commands. We don't want "ShellTool(ls)" to allow lsmod.
-      const allCommandsAllowed = commands.every((cmd) => {
-        for (const allowed of allowedShellCommands) {
-          if (cmd === allowed || cmd.startsWith(allowed + ' ')) {
-            return true;
-          }
-        }
-        return false;
-      });
-
-      if (allCommandsAllowed) {
-        // All parts of the command are allowed, so confirmation is not needed.
+      const allowedTools = this.config.getAllowedTools() || [];
+      const [SHELL_TOOL_NAME] = SHELL_TOOL_NAMES;
+      if (doesToolInvocationMatch(SHELL_TOOL_NAME, this, allowedTools)) {
+        // If it's an allowed shell command, we don't need to confirm execution.
         return false;
       }
 
