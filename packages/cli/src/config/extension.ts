@@ -438,6 +438,7 @@ export async function installOrUpdateExtension(
   const telemetryConfig = getTelemetryConfig(cwd);
   let newExtensionConfig: ExtensionConfig | null = null;
   let localSourcePath: string | undefined;
+  let tempDir: string | undefined;
 
   try {
     const settings = loadSettings(cwd).merged;
@@ -456,8 +457,6 @@ export async function installOrUpdateExtension(
     ) {
       installMetadata.source = path.resolve(cwd, installMetadata.source);
     }
-
-    let tempDir: string | undefined;
 
     if (
       installMetadata.type === 'git' ||
@@ -485,60 +484,51 @@ export async function installOrUpdateExtension(
       throw new Error(`Unsupported install type: ${installMetadata.type}`);
     }
 
-    try {
-      newExtensionConfig = loadExtensionConfig({
-        extensionDir: localSourcePath,
-        workspaceDir: cwd,
-      });
+    newExtensionConfig = loadExtensionConfig({
+      extensionDir: localSourcePath,
+      workspaceDir: cwd,
+    });
 
-      const newExtensionName = newExtensionConfig.name;
-      if (!isUpdate) {
-        const installedExtensions = loadUserExtensions();
-        if (
-          installedExtensions.some(
-            (installed) => installed.name === newExtensionName,
-          )
-        ) {
-          throw new Error(
-            `Extension "${newExtensionName}" is already installed. Please uninstall it first.`,
-          );
-        }
-      }
-
-      await maybeRequestConsentOrFail(
-        newExtensionConfig,
-        requestConsent,
-        previousExtensionConfig,
-      );
-
-      const extensionStorage = new ExtensionStorage(newExtensionName);
-      const destinationPath = extensionStorage.getExtensionDir();
-
-      if (isUpdate) {
-        await uninstallExtension(newExtensionName, isUpdate, cwd);
-      }
-
-      await fs.promises.mkdir(destinationPath, { recursive: true });
-
+    const newExtensionName = newExtensionConfig.name;
+    if (!isUpdate) {
+      const installedExtensions = loadUserExtensions();
       if (
-        installMetadata.type === 'local' ||
-        installMetadata.type === 'git' ||
-        installMetadata.type === 'github-release'
+        installedExtensions.some(
+          (installed) => installed.name === newExtensionName,
+        )
       ) {
-        await copyExtension(localSourcePath, destinationPath);
-      }
-
-      const metadataString = JSON.stringify(installMetadata, null, 2);
-      const metadataPath = path.join(
-        destinationPath,
-        INSTALL_METADATA_FILENAME,
-      );
-      await fs.promises.writeFile(metadataPath, metadataString);
-    } finally {
-      if (tempDir) {
-        await fs.promises.rm(tempDir, { recursive: true, force: true });
+        throw new Error(
+          `Extension "${newExtensionName}" is already installed. Please uninstall it first.`,
+        );
       }
     }
+
+    await maybeRequestConsentOrFail(
+      newExtensionConfig,
+      requestConsent,
+      previousExtensionConfig,
+    );
+
+    const extensionStorage = new ExtensionStorage(newExtensionName);
+    const destinationPath = extensionStorage.getExtensionDir();
+
+    if (isUpdate) {
+      await uninstallExtension(newExtensionName, isUpdate, cwd);
+    }
+
+    await fs.promises.mkdir(destinationPath, { recursive: true });
+
+    if (
+      installMetadata.type === 'local' ||
+      installMetadata.type === 'git' ||
+      installMetadata.type === 'github-release'
+    ) {
+      await copyExtension(localSourcePath, destinationPath);
+    }
+
+    const metadataString = JSON.stringify(installMetadata, null, 2);
+    const metadataPath = path.join(destinationPath, INSTALL_METADATA_FILENAME);
+    await fs.promises.writeFile(metadataPath, metadataString);
 
     if (isUpdate) {
       logExtensionUpdateEvent(
@@ -601,6 +591,10 @@ export async function installOrUpdateExtension(
       );
     }
     throw error;
+  } finally {
+    if (tempDir) {
+      await fs.promises.rm(tempDir, { recursive: true, force: true });
+    }
   }
 }
 
