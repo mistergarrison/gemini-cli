@@ -36,22 +36,23 @@ import {
   getCommandRoots,
   isCommandAllowed,
   SHELL_TOOL_NAMES,
+  splitCommands,
   stripShellWrapper,
 } from '../utils/shell-utils.js';
 
 export const OUTPUT_UPDATE_INTERVAL_MS = 1000;
 
 /**
- * Parses the `--allowed-tools` flag to determine which sub-commands of the
- * ShellTool are allowed. The flag can be provided multiple times.
+ * Parses the `--allowed-tools` flag to determine which shell commands the
+ * ShellTool allows. The flag can be provided multiple times.
  *
  * @param allowedTools The list of allowed tools from the config.
- * @returns A Set of allowed sub-commands, or null if all commands are allowed.
- *  - `null`: All sub-commands are allowed (e.g., --allowed-tools="ShellTool").
- *  - `Set<string>`: A set of specifically allowed sub-commands (e.g., --allowed-tools="ShellTool(wc)" --allowed-tools="ShellTool(ls)").
- *  - `Set<>` (empty): No sub-commands are allowed (e.g., --allowed-tools="ShellTool()").
+ * @returns A Set of allowed shell commands, or null if all commands are allowed.
+ *  - `null`: All shell commands are allowed (e.g., --allowed-tools="ShellTool").
+ *  - `Set<string>`: A set of specifically allowed shell commands (e.g., --allowed-tools="ShellTool(wc)" --allowed-tools="ShellTool(ls)").
+ *  - `Set<>` (empty): No shell commands are allowed (e.g., --allowed-tools="ShellTool()").
  */
-function parseAllowedSubcommands(
+function parseAllowedShellCommands(
   allowedTools: readonly string[],
 ): Set<string> | null {
   const shellToolEntries = allowedTools.filter((tool) =>
@@ -134,18 +135,31 @@ export class ShellToolInvocation extends BaseToolInvocation<
       this.config.getApprovalMode() !== ApprovalMode.YOLO
     ) {
       const allowed = this.config.getAllowedTools() || [];
-      const allowedSubcommands = parseAllowedSubcommands(allowed);
-      if (allowedSubcommands !== null) {
-        // Not all commands are allowed, so we need to check.
-        const allCommandsAllowed = rootCommands.every((cmd) =>
-          allowedSubcommands.has(cmd),
-        );
-        if (!allCommandsAllowed) {
-          throw new Error(
-            `Command "${command}" is not in the list of allowed tools for non-interactive mode.`,
-          );
-        }
+      const allowedShellCommands = parseAllowedShellCommands(allowed);
+
+      if (allowedShellCommands == null) {
+        // all commands are permitted, so confirmation is not needed.
+        return false;
       }
+
+      const commands = splitCommands(command);
+      // we have to add ' ' before checking for prefixes, because otherwise
+      // we would match against different commands.
+      const allCommandsAllowed = commands.every((cmd) =>
+        [...allowedShellCommands].some(
+          (allowedShellCmd) =>
+            allowedShellCmd === cmd || cmd.startsWith(allowedShellCmd + ' '),
+        ),
+      );
+
+      if (allCommandsAllowed) {
+        // All parts of the command are allowed, so confirmation is not needed.
+        return false;
+      }
+
+      throw new Error(
+        `Command "${command}" is not in the list of allowed tools for non-interactive mode.`,
+      );
     }
 
     const commandsToConfirm = rootCommands.filter(
