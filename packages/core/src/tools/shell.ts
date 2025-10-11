@@ -86,13 +86,14 @@ export class ShellToolInvocation extends BaseToolInvocation<
       !this.config.isInteractive() &&
       this.config.getApprovalMode() !== ApprovalMode.YOLO
     ) {
-      const { allowed, reason } = isCommandAllowed(command, this.config);
-      if (!allowed) {
-        throw new Error(
-          reason ||
-            `Command "${command}" is not in the list of allowed tools for non-interactive mode.`,
-        );
+      const { allowed } = isCommandAllowed(command, this.config);
+      if (allowed) {
+        return false;
       }
+
+      throw new Error(
+        `Command "${command}" is not in the list of allowed tools for non-interactive mode.`,
+      );
     }
 
     const commandsToConfirm = rootCommands.filter(
